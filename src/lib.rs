@@ -95,6 +95,12 @@ pub trait GameState<'a>: 'a + Clone + Ord {
         best_value
     }
 
+    // compute the value in player +1 perspective
+    // turn of `player` to play
+    fn negamax_value(&self, player: i32, depth: i32, table: &mut Table<Self>) -> i32 {
+        player * self.negamax_table(player, depth, -std::i32::MAX, std::i32::MAX, table)
+    }
+
     fn bot_play(&self, player: i32, depth: i32, table: &mut Table<Self>) -> Vec<Self> {
         let mut best_value = -std::i32::MAX;
         let mut results = Vec::new();
@@ -106,7 +112,7 @@ pub trait GameState<'a>: 'a + Clone + Ord {
                 best_value = value;
                 results.clear();
             }
-            if value > best_value {
+            if value == best_value {
                 results.push(state);
             }
         }
