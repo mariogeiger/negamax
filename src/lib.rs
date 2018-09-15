@@ -94,6 +94,26 @@ pub trait GameState<'a>: 'a + Clone + Ord {
         );
         best_value
     }
+
+    fn bot_play(&self, player: i32, depth: i32, table: &mut Table<Self>) -> Vec<Self> {
+        let mut best_value = -std::i32::MAX;
+        let mut results = Vec::new();
+
+        for state in self.possibilities(player) {
+            let value = -state.negamax_table(-player, depth, -std::i32::MAX, std::i32::MAX, table);
+
+            if value > best_value {
+                best_value = value;
+                results.clear();
+            }
+            if value > best_value {
+                results.push(state);
+            }
+        }
+
+        table.clean();
+        results
+    }
 }
 
 use std::collections::BTreeMap;
