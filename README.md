@@ -3,7 +3,7 @@
 - Cargo.toml :
 ```
 [dependencies]
-binary_heap_compare = { git = "https://github.com/mariogeiger/negamax" }
+negamax = { git = "https://github.com/mariogeiger/negamax" }
 ```
 
 - src/main.rs :
