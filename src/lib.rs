@@ -24,7 +24,7 @@ pub trait GameState<'a>: 'a + Clone + Ord {
         // two players: +1 and -1
 
         if depth == 0 || self.win(-player) {
-            return player * self.value();
+            return player * self.value() * (depth + 1);
         }
 
         let mut best_value = -std::i32::MAX;
@@ -54,7 +54,7 @@ pub trait GameState<'a>: 'a + Clone + Ord {
         table: &mut Table<Self>,
     ) -> i32 {
         if depth == 0 || self.win(-player) {
-            return player * self.value();
+            return player * self.value() * (depth + 1);
         }
 
         if depth <= 2 {
