@@ -165,11 +165,11 @@ where
         alpha: &mut i32,
         beta: &mut i32,
     ) -> Option<i32> {
-        if player == 1 {
+        if player == -1 {
             let mut cpy: S = state.clone();
             cpy.swap();
 
-            return self.get(&cpy, 0, depth, alpha, beta);
+            return self.get(&cpy, 1, depth, alpha, beta);
         }
 
         if let Some(vs) = self.0.get(state) {
