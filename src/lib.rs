@@ -134,12 +134,11 @@ enum Quality {
 #[derive(Clone, Copy)]
 struct TableEntry {
     value: i32,
-    depth: i32,
     quality: Quality,
 }
 
 #[derive(Clone)]
-pub struct Table<S: Ord>(BTreeMap<S, Vec<TableEntry>>);
+pub struct Table<S: Ord>(BTreeMap<(i32, S), Vec<TableEntry>>);
 
 impl<'a, S> Table<S>
 where
@@ -170,36 +169,33 @@ where
         beta: &mut i32,
     ) -> Option<i32> {
         if player == -1 {
-            let mut cpy: S = state.clone();
-            cpy.swap();
-
-            return self.get(&cpy, 1, depth, alpha, beta);
+            let mut state = state.clone();
+            state.swap();
+            return self.get(&state, 1, depth, alpha, beta);
         }
 
         let state = state.symmetries().into_iter().min().unwrap();
 
-        if let Some(vs) = self.0.get(&state) {
+        if let Some(vs) = self.0.get(&(depth, state)) {
             for entry in vs.iter() {
-                if entry.depth == depth {
-                    match entry.quality {
-                        Quality::Exact => {
-                            return Some(entry.value);
-                        }
-                        Quality::Upperbound => {
-                            if entry.value < *beta {
-                                *beta = entry.value;
-                            }
-                        }
-                        Quality::Lowerbound => {
-                            if entry.value > *alpha {
-                                *alpha = entry.value;
-                            }
-                        }
-                    }
-
-                    if *alpha >= *beta {
+                match entry.quality {
+                    Quality::Exact => {
                         return Some(entry.value);
                     }
+                    Quality::Upperbound => {
+                        if entry.value < *beta {
+                            *beta = entry.value;
+                        }
+                    }
+                    Quality::Lowerbound => {
+                        if entry.value > *alpha {
+                            *alpha = entry.value;
+                        }
+                    }
+                }
+
+                if *alpha >= *beta {
+                    return Some(entry.value);
                 }
             }
         }
@@ -220,9 +216,11 @@ where
             state.swap();
         }
 
+        let state = state.symmetries().into_iter().min().unwrap();
+        let key = (depth, state);
+
         let entry = TableEntry {
             value,
-            depth,
             quality: if value <= alpha {
                 Quality::Upperbound // le score de `state` est de au maximum `score`
             } else if beta <= value {
@@ -232,12 +230,11 @@ where
             },
         };
 
-        let s = state.symmetries().into_iter().min().unwrap();
-        if let Some(vs) = self.0.get_mut(&s) {
+        if let Some(vs) = self.0.get_mut(&key) {
             vs.push(entry);
             return;
         }
-        self.0.insert(s, vec![entry]);
+        self.0.insert(key, vec![entry]);
     }
 
     // remove useless entries
@@ -247,7 +244,6 @@ where
             'iloop: while i < list.len() {
                 for j in 0..list.len() {
                     if i != j
-                        && list[j].depth >= list[i].depth
                         && (list[j].quality == Quality::Exact || list[j].quality == list[i].quality)
                     {
                         // `j` is better than `i`
