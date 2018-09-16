@@ -117,7 +117,6 @@ pub trait GameState<'a>: 'a + Clone + Ord {
             }
         }
 
-        table.clean();
         results
     }
 }
@@ -125,20 +124,66 @@ pub trait GameState<'a>: 'a + Clone + Ord {
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq)]
-enum Quality {
-    Upperbound,
-    Lowerbound,
-    Exact,
+enum Interval {
+    Upperbound(i32),
+    Lowerbound(i32),
+    Range(i32, i32),
+    Exact(i32),
+    Unconstrained,
 }
 
-#[derive(Clone, Copy)]
-struct TableEntry {
-    value: i32,
-    quality: Quality,
+use std::cmp::{max, min};
+
+impl std::ops::Add for Interval {
+    type Output = Interval;
+    fn add(self, rhs: Interval) -> Interval {
+        match (self, rhs) {
+            (Interval::Unconstrained, y) => y,
+            (Interval::Exact(x), _) => Interval::Exact(x),
+            (Interval::Upperbound(xb), Interval::Upperbound(yb)) => {
+                Interval::Upperbound(min(xb, yb))
+            }
+            (Interval::Upperbound(xb), Interval::Lowerbound(ya)) => if ya == xb {
+                Interval::Exact(ya)
+            } else {
+                Interval::Range(ya, xb)
+            },
+            (Interval::Upperbound(xb), Interval::Range(ya, yb)) => if ya == xb {
+                Interval::Exact(ya)
+            } else {
+                Interval::Range(ya, min(xb, yb))
+            },
+            (Interval::Lowerbound(xa), Interval::Lowerbound(ya)) => {
+                Interval::Lowerbound(max(xa, ya))
+            }
+            (Interval::Lowerbound(xa), Interval::Range(ya, yb)) => if xa == yb {
+                Interval::Exact(xa)
+            } else {
+                Interval::Range(max(xa, ya), yb)
+            },
+            (Interval::Range(xa, xb), Interval::Range(ya, yb)) => if xa == yb {
+                Interval::Exact(xa)
+            } else if ya == xb {
+                Interval::Exact(ya)
+            } else {
+                Interval::Range(max(xa, ya), min(xb, yb))
+            },
+            (x, y) => y + x,
+        }
+    }
 }
 
 #[derive(Clone)]
-pub struct Table<S: Ord>(BTreeMap<(i32, S), Vec<TableEntry>>);
+pub struct Table<S: Ord>(BTreeMap<(i32, S), Interval>);
+
+impl<'a, S> Default for Table<S>
+where
+    S: GameState<'a>,
+{
+    fn default() -> Table<S> {
+        Table::new()
+    }
+}
 
 impl<'a, S> Table<S>
 where
@@ -149,15 +194,11 @@ where
     }
 
     pub fn len(&self) -> usize {
-        let mut x = 0;
-        for list in self.0.values() {
-            x += list.len();
-        }
-        x
+        self.0.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.values().all(|list| list.is_empty())
+        self.0.is_empty()
     }
 
     pub fn get(
@@ -176,27 +217,34 @@ where
 
         let state = state.symmetries().into_iter().min().unwrap();
 
-        if let Some(vs) = self.0.get(&(depth, state)) {
-            for entry in vs.iter() {
-                match entry.quality {
-                    Quality::Exact => {
-                        return Some(entry.value);
-                    }
-                    Quality::Upperbound => {
-                        if entry.value < *beta {
-                            *beta = entry.value;
-                        }
-                    }
-                    Quality::Lowerbound => {
-                        if entry.value > *alpha {
-                            *alpha = entry.value;
-                        }
+        if let Some(&entry) = self.0.get(&(depth, state)) {
+            match entry {
+                Interval::Exact(value) => {
+                    return Some(value);
+                }
+                Interval::Upperbound(b) => {
+                    if b < *beta {
+                        *beta = b;
                     }
                 }
+                Interval::Lowerbound(a) => {
+                    if a > *alpha {
+                        *alpha = a;
+                    }
+                }
+                Interval::Range(a, b) => {
+                    if a > *alpha {
+                        *alpha = a;
+                    }
+                    if b < *beta {
+                        *beta = b;
+                    }
+                }
+                Interval::Unconstrained => {}
+            }
 
-                if *alpha >= *beta {
-                    return Some(entry.value);
-                }
+            if *alpha >= *beta {
+                return Some(*alpha);
             }
         }
         None
@@ -219,42 +267,15 @@ where
         let state = state.symmetries().into_iter().min().unwrap();
         let key = (depth, state);
 
-        let entry = TableEntry {
-            value,
-            quality: if value <= alpha {
-                Quality::Upperbound // le score de `state` est de au maximum `score`
-            } else if beta <= value {
-                Quality::Lowerbound // le score de `state` est de au moins `score`
-            } else {
-                Quality::Exact
-            },
+        let entry = if value <= alpha {
+            Interval::Upperbound(value) // le score de `state` est de au maximum `score`
+        } else if beta <= value {
+            Interval::Lowerbound(value) // le score de `state` est de au moins `score`
+        } else {
+            Interval::Exact(value)
         };
 
-        if let Some(vs) = self.0.get_mut(&key) {
-            vs.push(entry);
-            return;
-        }
-        self.0.insert(key, vec![entry]);
-    }
-
-    // remove useless entries
-    pub fn clean(&mut self) {
-        for list in self.0.values_mut() {
-            let mut i = 0;
-            'iloop: while i < list.len() {
-                for j in 0..list.len() {
-                    if i != j
-                        && (list[j].quality == Quality::Exact || list[j].quality == list[i].quality)
-                    {
-                        // `j` is better than `i`
-                        list.swap_remove(i);
-                        continue 'iloop;
-                    }
-                }
-
-                // `i` is not that bad
-                i += 1;
-            }
-        }
+        let old = self.0.entry(key).or_insert(Interval::Unconstrained);
+        *old = *old + entry;
     }
 }
