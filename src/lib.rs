@@ -121,9 +121,13 @@ pub trait GameState<'a>: 'a + Clone + Ord {
     }
 }
 
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 enum Interval {
     Upperbound(i32),
     Lowerbound(i32),
@@ -173,7 +177,7 @@ impl std::ops::Add for Interval {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Table<S: Ord>(BTreeMap<(i32, S), Interval>);
 
 impl<'a, S> Default for Table<S>
