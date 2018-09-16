@@ -29,14 +29,14 @@ pub trait GameState<'a>: 'a + Clone + Ord {
 
         let mut best_value = -std::i32::MAX;
 
-        for child in self.possibilities(player) {
-            let v = -child.negamax(-player, depth - 1, -beta, -alpha);
+        for state in self.possibilities(player) {
+            let value = -state.negamax(-player, depth - 1, -beta, -alpha);
 
-            if v > best_value {
-                best_value = v;
+            if value > best_value {
+                best_value = value;
             }
-            if v > alpha {
-                alpha = v;
+            if value > alpha {
+                alpha = value;
             }
             if alpha >= beta {
                 break;
@@ -70,14 +70,14 @@ pub trait GameState<'a>: 'a + Clone + Ord {
 
         let mut best_value = -std::i32::MAX;
 
-        for child in self.possibilities(player) {
-            let v = -child.negamax_table(-player, depth - 1, -beta, -alpha, table);
+        for state in self.possibilities(player) {
+            let value = -state.negamax_table(-player, depth - 1, -beta, -alpha, table);
 
-            if v > best_value {
-                best_value = v;
+            if value > best_value {
+                best_value = value;
             }
-            if v > alpha {
-                alpha = v;
+            if value > alpha {
+                alpha = value;
             }
             if alpha >= beta {
                 break;
@@ -151,10 +151,14 @@ where
 
     pub fn len(&self) -> usize {
         let mut x = 0;
-        for (_, list) in self.0.iter() {
+        for list in self.0.values() {
             x += list.len();
         }
         x
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.values().all(|list| list.is_empty())
     }
 
     pub fn get(
@@ -172,7 +176,9 @@ where
             return self.get(&cpy, 1, depth, alpha, beta);
         }
 
-        if let Some(vs) = self.0.get(state) {
+        let state = state.symmetries().into_iter().min().unwrap();
+
+        if let Some(vs) = self.0.get(&state) {
             for entry in vs.iter() {
                 if entry.depth == depth {
                     match entry.quality {
@@ -207,7 +213,7 @@ where
         depth: i32,
         alpha: i32,
         beta: i32,
-        score: i32,
+        value: i32,
     ) {
         if player == -1 {
             // allways use the player +1 perspective
@@ -215,29 +221,28 @@ where
         }
 
         let entry = TableEntry {
-            value: score,
-            depth: depth,
-            quality: if score <= alpha {
+            value,
+            depth,
+            quality: if value <= alpha {
                 Quality::Upperbound // le score de `state` est de au maximum `score`
-            } else if beta <= score {
+            } else if beta <= value {
                 Quality::Lowerbound // le score de `state` est de au moins `score`
             } else {
                 Quality::Exact
             },
         };
 
-        for s in state.symmetries() {
-            if let Some(vs) = self.0.get_mut(&s) {
-                vs.push(entry);
-                continue;
-            }
-            self.0.insert(s.clone(), vec![entry]);
+        let s = state.symmetries().into_iter().min().unwrap();
+        if let Some(vs) = self.0.get_mut(&s) {
+            vs.push(entry);
+            return;
         }
+        self.0.insert(s, vec![entry]);
     }
 
     // remove useless entries
     pub fn clean(&mut self) {
-        for (_, list) in self.0.iter_mut() {
+        for list in self.0.values_mut() {
             let mut i = 0;
             'iloop: while i < list.len() {
                 for j in 0..list.len() {
