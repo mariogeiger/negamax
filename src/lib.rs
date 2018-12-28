@@ -7,6 +7,11 @@ pub trait GameState<'a>: 'a + Clone + Ord {
     // compute the value in player +1 perspective
     fn value(&self) -> i32;
 
+    // compute the weighted value in `player` perspective
+    fn weight_value(&self, player: i32, depth: i32) -> i32 {
+        player * self.value() * (depth + 1)
+    }
+
     // compute posibilities for player `player`
     fn possibilities(&self, player: i32) -> Self::It;
 
@@ -23,8 +28,8 @@ pub trait GameState<'a>: 'a + Clone + Ord {
     fn negamax(&self, player: i32, depth: i32, mut alpha: i32, beta: i32) -> i32 {
         // two players: +1 and -1
 
-        if depth == 0 || self.win(-player) {
-            return player * self.value() * (depth + 1);
+        if depth == 0 || self.win(-player) || self.win(player) {
+            return self.weight_value(player, depth);
         }
 
         let mut best_value = -std::i32::MAX;
@@ -42,6 +47,9 @@ pub trait GameState<'a>: 'a + Clone + Ord {
                 break;
             }
         }
+
+        assert!(best_value != -std::i32::MAX);
+
         best_value
     }
 
@@ -53,8 +61,8 @@ pub trait GameState<'a>: 'a + Clone + Ord {
         mut beta: i32,
         table: &mut Table<Self>,
     ) -> i32 {
-        if depth == 0 || self.win(-player) {
-            return player * self.value() * (depth + 1);
+        if depth == 0 || self.win(-player) || self.win(player) {
+            return self.weight_value(player, depth);
         }
 
         if depth <= 2 {
@@ -83,6 +91,8 @@ pub trait GameState<'a>: 'a + Clone + Ord {
                 break;
             }
         }
+
+        assert!(best_value != -std::i32::MAX);
 
         table.insert(
             self.clone(),
@@ -148,30 +158,30 @@ impl std::ops::Add for Interval {
                 Interval::Upperbound(min(xb, yb))
             }
             (Interval::Upperbound(xb), Interval::Lowerbound(ya)) => if ya == xb {
-                Interval::Exact(ya)
-            } else {
-                Interval::Range(ya, xb)
-            },
+                    Interval::Exact(ya)
+                } else {
+                    Interval::Range(ya, xb)
+                },
             (Interval::Upperbound(xb), Interval::Range(ya, yb)) => if ya == xb {
-                Interval::Exact(ya)
-            } else {
-                Interval::Range(ya, min(xb, yb))
-            },
+                    Interval::Exact(ya)
+                } else {
+                    Interval::Range(ya, min(xb, yb))
+                },
             (Interval::Lowerbound(xa), Interval::Lowerbound(ya)) => {
                 Interval::Lowerbound(max(xa, ya))
             }
             (Interval::Lowerbound(xa), Interval::Range(ya, yb)) => if xa == yb {
-                Interval::Exact(xa)
-            } else {
-                Interval::Range(max(xa, ya), yb)
-            },
+                    Interval::Exact(xa)
+                } else {
+                    Interval::Range(max(xa, ya), yb)
+                },
             (Interval::Range(xa, xb), Interval::Range(ya, yb)) => if xa == yb {
-                Interval::Exact(xa)
-            } else if ya == xb {
-                Interval::Exact(ya)
-            } else {
-                Interval::Range(max(xa, ya), min(xb, yb))
-            },
+                    Interval::Exact(xa)
+                } else if ya == xb {
+                    Interval::Exact(ya)
+                } else {
+                    Interval::Range(max(xa, ya), min(xb, yb))
+                },
             (x, y) => y + x,
         }
     }
